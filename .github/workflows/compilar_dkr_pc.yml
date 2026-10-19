@@ -17,13 +17,13 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Download DKR Source via ZIP (Sin errores de Git)
+    - name: Download DKR Source via ZIP
       shell: powershell
       run: |
-        $zipUrl = "https://github.com/n64decomp/dkr/archive/refs/heads/main.zip"
+        $zipUrl = "https://github.com/n64decomp/dkr/archive/refs/heads/master.zip"
         Invoke-WebRequest -Uri $zipUrl -OutFile "dkr.zip"
         Expand-Archive -Path "dkr.zip" -DestinationPath "."
-        Rename-Item "dkr-main" "dkr_src"
+        Rename-Item "dkr-master" "dkr_src"
 
     - name: Install Dependencies
       shell: powershell
