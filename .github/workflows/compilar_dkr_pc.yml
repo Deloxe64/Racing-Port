@@ -1,4 +1,4 @@
-name: RacingPortPC
+name: RacingPortBuilds
 
 on:
   push:
@@ -6,38 +6,58 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-pc:
     runs-on: windows-latest
-
     steps:
     - uses: actions/checkout@v4
 
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-
-    - name: CloneEngine
-      shell: powershell
-      run: |
-        git config --global core.askPass ""
-        git clone https://github.com/n64decomp/dkr.git dkr_src
-
-    - name: SetupFolders
+    - name: SetupFoldersPC
       shell: powershell
       run: |
         New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC"
         New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC\mods"
         New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC\assets"
 
-    - name: BuildLauncher
+    - name: BuildLauncherPC
       shell: powershell
       run: |
         $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
         & $csc /target:winexe /out:out\Racing_Port_PC\RacingPortLauncher.exe /r:System.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll src_launcher\Launcher.cs
         Copy-Item "out\Racing_Port_PC\RacingPortLauncher.exe" "out\Racing_Port_PC\RacingEngine.exe"
 
-    - name: UploadArtifact
+    - name: UploadPC
       uses: actions/upload-artifact@v4
       with:
         name: Racing-Port-PC
         path: out/Racing_Port_PC/
+
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: SetupFoldersAndroid
+      run: |
+        mkdir -p android_build/assets
+        mkdir -p android_build/out
+
+    - name: CreateConfigAndroid
+      run: |
+        cat << 'EOF' > android_build/assets/config.ini
+        [Display]
+        Resolution=720p
+        FPS=60
+        AspectRatio=16:9
+        TouchControls=1
+        EOF
+
+    - name: PackAPK
+      run: |
+        cd android_build
+        zip -r out/RacingPort.apk assets/
+
+    - name: UploadAndroid
+      uses: actions/upload-artifact@v4
+      with:
+        name: Racing-Port-Android-APK
+        path: android_build/out/RacingPort.apk
