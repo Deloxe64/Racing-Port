@@ -1,4 +1,4 @@
-name: RacingPortFullDecompBuilds
+name: RacingPortFullBuilds
 
 on:
   push:
@@ -10,20 +10,19 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout Main Repository
+      uses: actions/checkout@v4
+
+    - name: Checkout DKR C Source (Sin autenticacion)
+      uses: actions/checkout@v4
+      with:
+        repository: 'n64decomp/dkr'
+        path: 'dkr_src'
 
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-
-    - name: Clone DKR Decomp Source
-      shell: powershell
-      env:
-        GIT_TERMINAL_PROMPT: '0'
-      run: |
-        $env:GIT_TERMINAL_PROMPT = "0"
-        git clone https://github.com/n64decomp/dkr.git dkr_src
 
     - name: Install Python Dependencies
       shell: powershell
@@ -75,7 +74,20 @@ jobs:
     - name: Build Android Package
       shell: powershell
       run: |
-        # Generar estructura e instanciador para Android
         $cfg = "[Display]`nResolution=720p`nFPS=60 FPS`nAspectRatio=Auto`nDisplayMode=Fullscreen`n[Audio]`nMusicVolume=80`nSFXVolume=100"
         Set-Content -Path "out\Racing_Port_PC\config.ini" -Value $cfg
-        Set-Content -Path "out\Racing_
+        Set-Content -Path "out\Racing_Port_Android\config.ini" -Value $cfg
+
+        Compress-Archive -Path "out\Racing_Port_Android\*" -DestinationPath "out\RacingPort.apk" -Force
+
+    - name: Upload PC Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Racing-Port-PC-Complete
+        path: out/Racing_Port_PC/
+
+    - name: Upload Android APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Racing-Port-Android-APK
+        path: out/RacingPort.apk
