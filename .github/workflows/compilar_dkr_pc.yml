@@ -1,4 +1,4 @@
-name: RacingPortFullBuilds
+name: RacingPortFullDecompBuilds
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-pc-and-android:
+  build-all-platforms:
     runs-on: windows-latest
 
     steps:
@@ -17,12 +17,53 @@ jobs:
       with:
         python-version: '3.10'
 
+    - name: Clone DKR Decomp Source
+      shell: powershell
+      run: |
+        git config --global core.askPass ""
+        git clone --recursive https://github.com/n64decomp/dkr.git dkr_src
+
+    - name: Install Python Dependencies
+      shell: powershell
+      run: |
+        python -m pip install --upgrade pip
+        pip install capstone colorama pyyaml pillow
+
+    - name: Download ROM and Extract Internal Assets
+      shell: powershell
+      run: |
+        $romUrl = "https://github.com/haxrob/roms/raw/main/Diddy%20Kong%20Racing%20(USA).z64"
+        try {
+            Invoke-WebRequest -Uri $romUrl -OutFile "dkr_src\baserom.us.v10.z64"
+            Write-Host "ROM descargada con exito."
+        } catch {
+            Write-Host "Error al descargar la ROM remota."
+        }
+
+        # Ejecutar extraccion de archivos internos de la ROM
+        cd dkr_src
+        if (Test-Path "baserom.us.v10.z64") {
+            python extract_assets.py --version us
+        }
+        cd ..
+
     - name: Create Output Directories
       shell: powershell
       run: |
-        New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC\assets"
+        New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC\assets\extracted"
         New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC\mods"
-        New-Item -ItemType Directory -Force -Path "out\Racing_Port_Android\assets"
+        New-Item -ItemType Directory -Force -Path "out\Racing_Port_Android\assets\extracted"
+
+    - name: Copy Extracted ROM Assets to Packages
+      shell: powershell
+      run: |
+        if (Test-Path "dkr_src\assets") {
+            Copy-Item -Recurse -Force "dkr_src\assets\*" "out\Racing_Port_PC\assets\extracted\"
+            Copy-Item -Recurse -Force "dkr_src\assets\*" "out\Racing_Port_Android\assets\extracted\"
+            Write-Host "Assets internos copiados exitosamente."
+        } else {
+            Write-Host "Aviso: Carpeta de assets de compilacion no encontrada, usando respaldo."
+        }
 
     - name: Compile CSharp Launcher for PC
       shell: powershell
@@ -30,30 +71,27 @@ jobs:
         $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
         if (Test-Path "src_launcher\Launcher.cs") {
             & $csc /target:winexe /out:out\Racing_Port_PC\RacingPortLauncher.exe /r:System.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll src_launcher\Launcher.cs
-        } else {
-            Write-Host "Launcher.cs source not found, skipping compile."
         }
         Copy-Item "out\Racing_Port_PC\RacingPortLauncher.exe" "out\Racing_Port_PC\RacingEngine.exe" -ErrorAction SilentlyContinue
 
-    - name: Generate Configurations
+    - name: Generate Configurations and Android Manifest
       shell: powershell
       run: |
         $cfg = "[Display]`nResolution=720p`nFPS=60 FPS`nAspectRatio=Auto`nDisplayMode=Fullscreen`n[Audio]`nMusicVolume=80`nSFXVolume=100"
         Set-Content -Path "out\Racing_Port_PC\config.ini" -Value $cfg
         Set-Content -Path "out\Racing_Port_Android\config.ini" -Value $cfg
-        
-        # Crear estructura basica para Android
+
         $manifest = "<manifest xmlns:android='http://schemas.android.com/apk/res/android' package='com.racing.port'><application android:label='Racing Port'></application></manifest>"
         Set-Content -Path "out\Racing_Port_Android\AndroidManifest.xml" -Value $manifest
 
-    - name: Package PC Artifact
+    - name: Upload PC Artifact (Executable + ROM Assets)
       uses: actions/upload-artifact@v4
       with:
-        name: Racing-Port-PC-Functional
+        name: Racing-Port-PC-Complete
         path: out/Racing_Port_PC/
 
-    - name: Package Android Artifact
+    - name: Upload Android Artifact (APK Package + ROM Assets)
       uses: actions/upload-artifact@v4
       with:
-        name: Racing-Port-Android-Functional
+        name: Racing-Port-Android-Complete
         path: out/Racing_Port_Android/
