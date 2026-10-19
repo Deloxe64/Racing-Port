@@ -19,9 +19,11 @@ jobs:
 
     - name: Clone DKR Decomp Source
       shell: powershell
+      env:
+        GIT_TERMINAL_PROMPT: '0'
       run: |
-        git config --global core.askPass ""
-        git clone --recursive https://github.com/n64decomp/dkr.git dkr_src
+        $env:GIT_TERMINAL_PROMPT = "0"
+        git clone https://github.com/n64decomp/dkr.git dkr_src
 
     - name: Install Python Dependencies
       shell: powershell
@@ -29,7 +31,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install capstone colorama pyyaml pillow
 
-    - name: Download ROM and Extract Internal Assets
+    - name: Download ROM and Extract Assets
       shell: powershell
       run: |
         $romUrl = "https://github.com/haxrob/roms/raw/main/Diddy%20Kong%20Racing%20(USA).z64"
@@ -37,32 +39,28 @@ jobs:
             Invoke-WebRequest -Uri $romUrl -OutFile "dkr_src\baserom.us.v10.z64"
             Write-Host "ROM descargada con exito."
         } catch {
-            Write-Host "Error al descargar la ROM remota."
+            Write-Host "Aviso: No se pudo descargar la ROM remota."
         }
 
-        # Ejecutar extraccion de archivos internos de la ROM
-        cd dkr_src
-        if (Test-Path "baserom.us.v10.z64") {
+        if (Test-Path "dkr_src\baserom.us.v10.z64") {
+            cd dkr_src
             python extract_assets.py --version us
+            cd ..
         }
-        cd ..
 
     - name: Create Output Directories
       shell: powershell
       run: |
-        New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC\assets\extracted"
+        New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC\assets"
         New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC\mods"
-        New-Item -ItemType Directory -Force -Path "out\Racing_Port_Android\assets\extracted"
+        New-Item -ItemType Directory -Force -Path "out\Racing_Port_Android\assets"
 
-    - name: Copy Extracted ROM Assets to Packages
+    - name: Copy Extracted Assets
       shell: powershell
       run: |
         if (Test-Path "dkr_src\assets") {
-            Copy-Item -Recurse -Force "dkr_src\assets\*" "out\Racing_Port_PC\assets\extracted\"
-            Copy-Item -Recurse -Force "dkr_src\assets\*" "out\Racing_Port_Android\assets\extracted\"
-            Write-Host "Assets internos copiados exitosamente."
-        } else {
-            Write-Host "Aviso: Carpeta de assets de compilacion no encontrada, usando respaldo."
+            Copy-Item -Recurse -Force "dkr_src\assets\*" "out\Racing_Port_PC\assets\"
+            Copy-Item -Recurse -Force "dkr_src\assets\*" "out\Racing_Port_Android\assets\"
         }
 
     - name: Compile CSharp Launcher for PC
@@ -74,24 +72,10 @@ jobs:
         }
         Copy-Item "out\Racing_Port_PC\RacingPortLauncher.exe" "out\Racing_Port_PC\RacingEngine.exe" -ErrorAction SilentlyContinue
 
-    - name: Generate Configurations and Android Manifest
+    - name: Build Android Package
       shell: powershell
       run: |
+        # Generar estructura e instanciador para Android
         $cfg = "[Display]`nResolution=720p`nFPS=60 FPS`nAspectRatio=Auto`nDisplayMode=Fullscreen`n[Audio]`nMusicVolume=80`nSFXVolume=100"
         Set-Content -Path "out\Racing_Port_PC\config.ini" -Value $cfg
-        Set-Content -Path "out\Racing_Port_Android\config.ini" -Value $cfg
-
-        $manifest = "<manifest xmlns:android='http://schemas.android.com/apk/res/android' package='com.racing.port'><application android:label='Racing Port'></application></manifest>"
-        Set-Content -Path "out\Racing_Port_Android\AndroidManifest.xml" -Value $manifest
-
-    - name: Upload PC Artifact (Executable + ROM Assets)
-      uses: actions/upload-artifact@v4
-      with:
-        name: Racing-Port-PC-Complete
-        path: out/Racing_Port_PC/
-
-    - name: Upload Android Artifact (APK Package + ROM Assets)
-      uses: actions/upload-artifact@v4
-      with:
-        name: Racing-Port-Android-Complete
-        path: out/Racing_Port_Android/
+        Set-Content -Path "out\Racing_
