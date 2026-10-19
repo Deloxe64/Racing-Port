@@ -1,4 +1,4 @@
-name: Racing Port - PC Native Port + C# Launcher (Limpio)
+name: RacingPortPC
 
 on:
   push:
@@ -6,42 +6,39 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-racing-port-pc:
+  build:
     runs-on: windows-latest
 
     steps:
-    - name: 1. Descargar repositorio principal
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-    - name: 2. Configurar entorno de compilacion (Python)
-      uses: actions/setup-python@v5
+    - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
-    - name: 3. Clonar fuente descompilada en C
+    - name: Clone
       shell: powershell
       run: |
-        git clone https://github.com/n64decomp/dkr.git dkr_src
+        git config --global core.askPass ""
+        git clone --recursive https://github.com/n64decomp/dkr.git dkr_src
 
-    - name: 4. Instalar dependencias de extraccion
+    - name: Dependencies
       shell: powershell
       run: |
         python -m pip install --upgrade pip
         pip install capstone colorama pyyaml
 
-    - name: 5. Descargar ROM temporalmente solo para extraer assets en la nube
+    - name: FetchROM
       shell: powershell
       run: |
-        Write-Host "Descargando ROM base de manera automatica para extraccion..."
-        $romUrl = "https://github.com/haxrob/roms/raw/main/Diddy%20Kong%20Racing%20(USA).z64"
+        $url = "https://github.com/haxrob/roms/raw/main/Diddy%20Kong%20Racing%20(USA).z64"
         try {
-            Invoke-WebRequest -Uri $romUrl -OutFile "dkr_src\baserom.us.v10.z64"
-            Write-Host "ROM descargada y lista para la extraccion de assets."
+            Invoke-WebRequest -Uri $url -OutFile "dkr_src\baserom.us.v10.z64"
         } catch {
-            Write-Host "Aviso: No se pudo descargar la ROM remota."
+            Write-Host "Fetch failed"
         }
 
-    - name: 6. Estructurar carpetas de salida de Racing Port
+    - name: Directories
       shell: powershell
       run: |
         New-Item -ItemType Directory -Force -Path "src_launcher"
@@ -49,7 +46,7 @@ jobs:
         New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC\mods"
         New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC\assets"
 
-    - name: 7. Generar Lanzador C# con Interfaz Tematica "Racing Port"
+    - name: BuildLauncherSource
       shell: powershell
       run: |
         $code = @"
@@ -73,7 +70,7 @@ jobs:
 
                 public MainForm()
                 {
-                    this.Text = "Racing Port - Official Launcher";
+                    this.Text = "Racing Port";
                     this.Size = new Size(720, 520);
                     this.StartPosition = FormStartPosition.CenterScreen;
                     this.FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -112,7 +109,7 @@ jobs:
                     };
 
                     Label subtitle = new Label {
-                        Text = "Native C/C++ Engine & Custom Launcher v1.0",
+                        Text = "Native Engine v1.0",
                         Font = new Font("Segoe UI", 10, FontStyle.Italic),
                         ForeColor = Color.SpringGreen,
                         AutoSize = false,
@@ -122,7 +119,7 @@ jobs:
                     };
 
                     lblRomStatus = new Label {
-                        Text = CheckRomState() ? "Estado de Assets: LISTOS PARA JUGAR" : "Estado: Carga tu ROM base (*.z64)",
+                        Text = CheckRomState() ? "Assets: READY" : "Status: Load ROM (*.z64)",
                         Font = new Font("Segoe UI", 9, FontStyle.Bold),
                         ForeColor = CheckRomState() ? Color.SpringGreen : Color.Coral,
                         AutoSize = false,
@@ -135,16 +132,16 @@ jobs:
                     panelMenu.Controls.Add(subtitle);
                     panelMenu.Controls.Add(lblRomStatus);
 
-                    panelMenu.Controls.Add(CreateRacingButton("JUGAR RACING PORT", 130, (s, e) => LaunchGame()));
-                    panelMenu.Controls.Add(CreateRacingButton("CARGAR / AÑADIR ROM", 190, (s, e) => SelectRomFile()));
-                    panelMenu.Controls.Add(CreateRacingButton("CONFIGURACION", 250, (s, e) => ShowConfig(true)));
-                    panelMenu.Controls.Add(CreateRacingButton("MODS & TRACKS", 310, (s, e) => OpenModsFolder()));
-                    panelMenu.Controls.Add(CreateRacingButton("SALIR", 370, (s, e) => Application.Exit()));
+                    panelMenu.Controls.Add(CreateBtn("PLAY RACING PORT", 130, (s, e) => LaunchGame()));
+                    panelMenu.Controls.Add(CreateBtn("LOAD ROM", 190, (s, e) => SelectRomFile()));
+                    panelMenu.Controls.Add(CreateBtn("SETTINGS", 250, (s, e) => ShowConfig(true)));
+                    panelMenu.Controls.Add(CreateBtn("MODS", 310, (s, e) => OpenModsFolder()));
+                    panelMenu.Controls.Add(CreateBtn("EXIT", 370, (s, e) => Application.Exit()));
 
                     panelConfig = new Panel { Dock = DockStyle.Fill, Visible = false, BackColor = Color.Transparent };
 
                     Label cfgTitle = new Label {
-                        Text = "CONFIGURACION DE RACING PORT",
+                        Text = "RACING PORT SETTINGS",
                         Font = new Font("Segoe UI", 16, FontStyle.Bold),
                         ForeColor = Color.Cyan,
                         Size = new Size(700, 40),
@@ -153,39 +150,165 @@ jobs:
                     };
                     panelConfig.Controls.Add(cfgTitle);
 
-                    panelConfig.Controls.Add(CreateLabel("Resolucion de Pantalla:", 70));
-                    cbResolution = new ComboBox { Location = new Point(280, 67), DropDownStyle = ComboBoxStyle.DropDownList, Width = 220, Font = new Font("Segoe UI", 9) };
-                    cbResolution.Items.AddRange(new string[] { "480p (854x480)", "720p (1280x720)", "1080p (1920x1080)" });
+                    panelConfig.Controls.Add(CreateLabel("Resolution:", 70));
+                    cbResolution = new ComboBox { Location = new Point(280, 67), DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
+                    cbResolution.Items.AddRange(new string[] { "480p", "720p", "1080p" });
                     cbResolution.SelectedIndex = 1;
                     panelConfig.Controls.Add(cbResolution);
 
-                    panelConfig.Controls.Add(CreateLabel("Tasa de FPS:", 110));
-                    cbFPS = new ComboBox { Location = new Point(280, 107), DropDownStyle = ComboBoxStyle.DropDownList, Width = 220, Font = new Font("Segoe UI", 9) };
+                    panelConfig.Controls.Add(CreateLabel("FPS:", 110));
+                    cbFPS = new ComboBox { Location = new Point(280, 107), DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
                     cbFPS.Items.AddRange(new string[] { "60 FPS", "90 FPS", "120 FPS" });
                     cbFPS.SelectedIndex = 0;
                     panelConfig.Controls.Add(cbFPS);
 
-                    panelConfig.Controls.Add(CreateLabel("Relacion de Aspecto:", 150));
-                    cbAspect = new ComboBox { Location = new Point(280, 147), DropDownStyle = ComboBoxStyle.DropDownList, Width = 220, Font = new Font("Segoe UI", 9) };
-                    cbAspect.Items.AddRange(new string[] { "Ajustar a Pantalla (Dispositivo)", "4:3 (Clasico N64)", "16:9 (Panoramica)" });
+                    panelConfig.Controls.Add(CreateLabel("Aspect Ratio:", 150));
+                    cbAspect = new ComboBox { Location = new Point(280, 147), DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
+                    cbAspect.Items.AddRange(new string[] { "Auto", "4:3", "16:9" });
                     cbAspect.SelectedIndex = 0;
                     panelConfig.Controls.Add(cbAspect);
 
-                    panelConfig.Controls.Add(CreateLabel("Modo de Visualizacion:", 190));
-                    cbDisplayMode = new ComboBox { Location = new Point(280, 187), DropDownStyle = ComboBoxStyle.DropDownList, Width = 220, Font = new Font("Segoe UI", 9) };
-                    cbDisplayMode.Items.AddRange(new string[] { "Pantalla Completa (Fullscreen)", "Ventana Panoramica" });
+                    panelConfig.Controls.Add(CreateLabel("Display Mode:", 190));
+                    cbDisplayMode = new ComboBox { Location = new Point(280, 187), DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
+                    cbDisplayMode.Items.AddRange(new string[] { "Fullscreen", "Windowed" });
                     cbDisplayMode.SelectedIndex = 0;
                     panelConfig.Controls.Add(cbDisplayMode);
 
-                    panelConfig.Controls.Add(CreateLabel("Volumen Musica:", 240));
-                    tbMusicVolume = new TrackBar { Location = new Point(280, 235), Minimum = 0, Maximum = 100, Value = 80, Width = 220, TickFrequency = 10 };
-                    lblMusicVal = new Label { Text = "80%", Location = new Point(510, 240), AutoSize = true, ForeColor = Color.Yellow, Font = new Font("Segoe UI", 9, FontStyle.Bold) };
+                    panelConfig.Controls.Add(CreateLabel("Music Volume:", 240));
+                    tbMusicVolume = new TrackBar { Location = new Point(280, 235), Minimum = 0, Maximum = 100, Value = 80, Width = 220 };
+                    lblMusicVal = new Label { Text = "80%", Location = new Point(510, 240), AutoSize = true, ForeColor = Color.Yellow };
                     tbMusicVolume.ValueChanged += (s, e) => lblMusicVal.Text = tbMusicVolume.Value + "%";
                     panelConfig.Controls.Add(tbMusicVolume);
                     panelConfig.Controls.Add(lblMusicVal);
 
-                    panelConfig.Controls.Add(CreateLabel("Efectos de Sonido (SFX):", 290));
-                    tbSFXVolume = new TrackBar { Location = new Point(280, 285), Minimum = 0, Maximum = 100, Value = 100, Width = 220, TickFrequency = 10 };
-                    lblSFXVal = new Label { Text = "100%", Location = new Point(510, 290), AutoSize = true, ForeColor = Color.Yellow, Font = new Font("Segoe UI", 9, FontStyle.Bold) };
+                    panelConfig.Controls.Add(CreateLabel("SFX Volume:", 290));
+                    tbSFXVolume = new TrackBar { Location = new Point(280, 285), Minimum = 0, Maximum = 100, Value = 100, Width = 220 };
+                    lblSFXVal = new Label { Text = "100%", Location = new Point(510, 290), AutoSize = true, ForeColor = Color.Yellow };
                     tbSFXVolume.ValueChanged += (s, e) => lblSFXVal.Text = tbSFXVolume.Value + "%";
                     panelConfig.Controls.Add(tbSFXVolume);
+                    panelConfig.Controls.Add(lblSFXVal);
+
+                    Button btnSave = new Button {
+                        Text = "SAVE & BACK",
+                        Location = new Point(250, 360),
+                        Size = new Size(220, 42),
+                        BackColor = Color.FromArgb(0, 120, 60),
+                        ForeColor = Color.White,
+                        Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                        FlatStyle = FlatStyle.Flat
+                    };
+                    btnSave.Click += (s, e) => { SaveConfiguration(); ShowConfig(false); };
+                    panelConfig.Controls.Add(btnSave);
+
+                    this.Controls.Add(panelMenu);
+                    this.Controls.Add(panelConfig);
+                }
+
+                private Label CreateLabel(string text, int top)
+                {
+                    return new Label { Text = text, Location = new Point(80, top), AutoSize = true, ForeColor = Color.White };
+                }
+
+                private Button CreateBtn(string text, int top, EventHandler onClick)
+                {
+                    Button btn = new Button {
+                        Text = text,
+                        Location = new Point(210, top),
+                        Size = new Size(290, 45),
+                        BackColor = Color.FromArgb(25, 45, 20),
+                        ForeColor = Color.Gold,
+                        Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+                        FlatStyle = FlatStyle.Flat,
+                        Cursor = Cursors.Hand
+                    };
+                    btn.Click += onClick;
+                    return btn;
+                }
+
+                private bool CheckRomState()
+                {
+                    return File.Exists("assets/game_base.rom") || File.Exists("dkr.z64");
+                }
+
+                private void SelectRomFile()
+                {
+                    using (OpenFileDialog ofd = new OpenFileDialog())
+                    {
+                        ofd.Filter = "ROMs (*.z64;*.v64)|*.z64;*.v64";
+                        if (ofd.ShowDialog() == DialogResult.OK)
+                        {
+                            if (!Directory.Exists("assets")) Directory.CreateDirectory("assets");
+                            File.Copy(ofd.FileName, "assets/game_base.rom", true);
+                            lblRomStatus.Text = "Assets: READY";
+                            lblRomStatus.ForeColor = Color.SpringGreen;
+                        }
+                    }
+                }
+
+                private void ShowConfig(bool show)
+                {
+                    panelMenu.Visible = !show;
+                    panelConfig.Visible = show;
+                }
+
+                private void SaveConfiguration()
+                {
+                    string iniData = string.Format(
+                        "[Display]\nResolution={0}\nFPS={1}\nAspectRatio={2}\nDisplayMode={3}\n\n[Audio]\nMusicVolume={4}\nSFXVolume={5}\n",
+                        cbResolution.SelectedItem, cbFPS.SelectedItem, cbAspect.SelectedItem, cbDisplayMode.SelectedItem, tbMusicVolume.Value, tbSFXVolume.Value
+                    );
+                    File.WriteAllText("config.ini", iniData);
+                }
+
+                private void OpenModsFolder()
+                {
+                    if (!Directory.Exists("mods")) Directory.CreateDirectory("mods");
+                    Process.Start("explorer.exe", "mods");
+                }
+
+                private void LaunchGame()
+                {
+                    if (File.Exists("RacingEngine.exe")) {
+                        Process.Start("RacingEngine.exe");
+                    }
+                }
+
+                [STAThread]
+                public static void Main()
+                {
+                    Application.EnableVisualStyles();
+                    Application.Run(new MainForm());
+                }
+            }
+        }
+"@
+        [System.IO.File]::WriteAllText("src_launcher\Launcher.cs", $code, [System.Text.Encoding]::UTF8)
+
+    - name: CompileLauncher
+      shell: powershell
+      run: |
+        $cscPath = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+        & $cscPath /target:winexe /out:out\Racing_Port_PC\RacingPortLauncher.exe /r:System.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll src_launcher\Launcher.cs
+
+    - name: ConfigFile
+      shell: powershell
+      run: |
+        $cfgContent = @"
+[Display]
+Resolution=720p
+FPS=60 FPS
+AspectRatio=Auto
+DisplayMode=Fullscreen
+
+[Audio]
+MusicVolume=80
+SFXVolume=100
+"@
+        [System.IO.File]::WriteAllText("out\Racing_Port_PC\config.ini", $cfgContent, [System.Text.Encoding]::UTF8)
+        Copy-Item "out\Racing_Port_PC\RacingPortLauncher.exe" "out\Racing_Port_PC\RacingEngine.exe"
+
+    - name: Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Racing-Port-PC
+        path: out/Racing_Port_PC/
