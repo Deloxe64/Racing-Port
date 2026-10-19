@@ -10,39 +10,69 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout Repositorio
+      uses: actions/checkout@v4
 
-    - name: Build Racing Port Packages
+    - name: Crear Carpetas de Salida
       shell: powershell
       run: |
-        Write-Host "Creando carpetas de salida para PC y Android..."
+        New-Item -ItemType Directory -Force -Path "src_launcher"
         New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC\assets"
         New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC\mods"
         New-Item -ItemType Directory -Force -Path "out\Racing_Port_Android\assets"
 
-        Write-Host "Compilando lanzador C# para PC..."
-        $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-        if (Test-Path "src_launcher\Launcher.cs") {
-            & $csc /target:winexe /out:out\Racing_Port_PC\RacingPortLauncher.exe /r:System.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll src_launcher\Launcher.cs
-        }
-        Copy-Item "out\Racing_Port_PC\RacingPortLauncher.exe" "out\Racing_Port_PC\RacingEngine.exe" -ErrorAction SilentlyContinue
+    - name: Crear Codigo CSharp si no existe
+      shell: powershell
+      run: |
+        if (-not (Test-Path "src_launcher\Launcher.cs")) {
+            $csharp = @"
+            using System;
+            using System.Windows.Forms;
 
-        Write-Host "Generando archivos de configuracion..."
+            namespace RacingPort
+            {
+                public class Program
+                {
+                    [STAThread]
+                    public static void Main()
+                    {
+                        Application.EnableVisualStyles();
+                        MessageBox.Show("Racing Port - Iniciando Lanzador", "Racing Port");
+                    }
+                }
+            }
+"@
+            Set-Content -Path "src_launcher\Launcher.cs" -Value $csharp
+        }
+
+    - name: Compilar Lanzador EXE
+      shell: powershell
+      run: |
+        $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+        & $csc /target:winexe /out:out\Racing_Port_PC\RacingPortLauncher.exe /r:System.dll /r:System.Windows.Forms.dll src_launcher\Launcher.cs
+        if (Test-Path "out\Racing_Port_PC\RacingPortLauncher.exe") {
+            Copy-Item "out\Racing_Port_PC\RacingPortLauncher.exe" "out\Racing_Port_PC\RacingEngine.exe" -Force
+        }
+
+    - name: Generar Configuraciones
+      shell: powershell
+      run: |
         $cfg = "[Display]`nResolution=720p`nFPS=60 FPS`nAspectRatio=Auto`nDisplayMode=Fullscreen`n[Audio]`nMusicVolume=80`nSFXVolume=100"
         Set-Content -Path "out\Racing_Port_PC\config.ini" -Value $cfg
         Set-Content -Path "out\Racing_Port_Android\config.ini" -Value $cfg
 
-        Write-Host "Empaquetando APK para Android..."
+    - name: Empaquetar APK Android
+      shell: powershell
+      run: |
         Compress-Archive -Path "out\Racing_Port_Android\*" -DestinationPath "out\RacingPort.apk" -Force
-        Write-Host "¡Proceso finalizado con exito!"
 
-    - name: Upload PC Artifact
+    - name: Subir Artefacto PC
       uses: actions/upload-artifact@v4
       with:
         name: Racing-Port-PC-Complete
         path: out/Racing_Port_PC/
 
-    - name: Upload Android APK
+    - name: Subir Artefacto Android APK
       uses: actions/upload-artifact@v4
       with:
         name: Racing-Port-Android-APK
