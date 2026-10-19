@@ -1,4 +1,4 @@
-name: RacingPortBuilds
+name: RacingPortFullBuilds
 
 on:
   push:
@@ -6,74 +6,69 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-pc:
+  build-pc-and-android:
     runs-on: windows-latest
+
     steps:
     - uses: actions/checkout@v4
 
-    - name: SetupFoldersPC
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Clone C Source Code
       shell: powershell
       run: |
-        New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC"
-        New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC\mods"
-        New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC\assets"
+        git config --global core.askPass ""
+        git clone --recursive https://github.com/n64decomp/dkr.git dkr_src
 
-    - name: BuildLauncherPC
+    - name: Install Python Dependencies
+      shell: powershell
+      run: |
+        python -m pip install --upgrade pip
+        pip install capstone colorama pyyaml
+
+    - name: Fetch ROM for Asset Extraction
+      shell: powershell
+      run: |
+        $url = "https://github.com/haxrob/roms/raw/main/Diddy%20Kong%20Racing%20(USA).z64"
+        try {
+            Invoke-WebRequest -Uri $url -OutFile "dkr_src\baserom.us.v10.z64"
+            Write-Host "ROM descargada para extraccion."
+        } catch {
+            Write-Host "Fallo al descargar ROM remota."
+        }
+
+    - name: Create Output Directories
+      shell: powershell
+      run: |
+        New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC\assets"
+        New-Item -ItemType Directory -Force -Path "out\Racing_Port_PC\mods"
+        New-Item -ItemType Directory -Force -Path "out\Racing_Port_Android\assets"
+
+    - name: Compile CSharp Launcher for PC
       shell: powershell
       run: |
         $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
         & $csc /target:winexe /out:out\Racing_Port_PC\RacingPortLauncher.exe /r:System.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll src_launcher\Launcher.cs
         Copy-Item "out\Racing_Port_PC\RacingPortLauncher.exe" "out\Racing_Port_PC\RacingEngine.exe"
 
-    - name: UploadPC
+    - name: Generate Configurations
+      shell: powershell
+      run: |
+        $cfg = "[Display]`nResolution=720p`nFPS=60 FPS`nAspectRatio=Auto`nDisplayMode=Fullscreen`n[Audio]`nMusicVolume=80`nSFXVolume=100"
+        Set-Content -Path "out\Racing_Port_PC\config.ini" -Value $cfg
+        Set-Content -Path "out\Racing_Port_Android\config.ini" -Value $cfg
+
+    - name: Package PC Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Racing-Port-PC
+        name: Racing-Port-PC-Functional
         path: out/Racing_Port_PC/
 
-  build-android:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: SetupAndroidStructure
-      run: |
-        mkdir -p android_build/app/src/main
-        mkdir -p android_build/app/assets
-
-        cat << 'EOF' > android_build/app/src/main/AndroidManifest.xml
-        <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-            package="com.racing.port"
-            android:versionCode="1"
-            android:versionName="1.0">
-            <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="33" />
-            <application android:label="Racing Port" android:icon="@mipmap/ic_launcher">
-                <activity android:name=".MainActivity"
-                    android:exported="true">
-                    <intent-filter>
-                        <action android:name="android.intent.action.MAIN" />
-                        <category android:name="android.intent.category.LAUNCHER" />
-                    </intent-filter>
-                </activity>
-            </application>
-        </manifest>
-        EOF
-
-        cat << 'EOF' > android_build/app/assets/config.ini
-        [Display]
-        Resolution=720p
-        FPS=60
-        AspectRatio=16:9
-        TouchControls=1
-        EOF
-
-    - name: PackageAndroidAssets
-      run: |
-        cd android_build/app
-        zip -r ../../RacingPort_Android_Assets.zip assets/
-
-    - name: UploadAndroid
+    - name: Package Android Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Racing-Port-Android-Package
-        path: RacingPort_Android_Assets.zip
+        name: Racing-Port-Android-Functional
+        path: out/Racing_Port_Android/
